@@ -1,0 +1,4 @@
+{
+  "ENGINE": "<The translation engine of your choice ('google', 'yandex', 'libre', 'deepl')>",
+  "KEY": "<Your API key>"
+}
