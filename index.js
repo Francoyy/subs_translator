@@ -2,7 +2,8 @@ import fs from 'fs';
 import { parseSync, stringifySync } from 'subtitle';  
 import translate from "translate";
 
-const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'))
+const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
+const whisperFixes = JSON.parse(fs.readFileSync('./whisper_fixes.json', 'utf8'));
 
 translate.engine = config.ENGINE;
 translate.key = config.KEY;
@@ -14,6 +15,45 @@ const language_input = args[0];
 const language_output = args[1];
 const merge = args[2] && args[2] === "merge";
 
+var process_input = function(subs) {
+  for (let i=0;i<subs.length;i++) {
+    subs[i].data.text = subs[i].data.text.replace("<u>","").replace("</u>", "");
+    for (let key in whisperFixes[language_input]) {
+      if (subs[i].data.text.indexOf(key) > -1) {
+        subs[i].data.text = subs[i].data.text.replace(key, whisperFixes[language_input][key]);
+        //console.log("Replaced " + key + " with " + whisperFixes[language_input][key]);
+      }
+    };
+  }
+
+  let i=0;
+  let current = "";
+  let next = "";
+  while (i < subs.length-1) {
+    current = subs[i].data.text;
+    next = subs[i+1].data.text;
+    if (current === next) {
+      subs[i].data.end = subs[i+1].data.end;
+      subs[i].data.text = current;
+      subs.splice(i+1, 1);
+    } else {
+      i++;
+    }
+  }
+  return subs;
+}
+
+var process_output = function(translation) {
+  //console.log("Checking translation=" + translation);
+  for (let key in whisperFixes[language_output]) {
+    if (translation.indexOf(key) > -1) {
+      translation.replace(key, whisperFixes[language_output][key]);
+      //console.log("Replaced " + key + " with " + whisperFixes[language_output][key]);
+    }
+  };
+  return translation;
+}
+
 let subtitles = fs.readdirSync('./src')
 let supportExtensions = ['srt', 'vtt']
 for (let subtitleFile of subtitles) {
@@ -21,6 +61,7 @@ for (let subtitleFile of subtitles) {
   let subtitle = fs.readFileSync(`./src/${subtitleFile}`, 'utf8')
   subtitle = parseSync(subtitle)
   subtitle = subtitle.filter(line => line.type === 'cue')
+  subtitle = process_input(subtitle);
 
   let current = "";
   for (let i=0;i<subtitle.length;i++) {
@@ -28,8 +69,13 @@ for (let subtitleFile of subtitles) {
     console.log(current);
     let translation = await translate(current, {from: language_input, to: language_output});
     console.log(translation);
+    translation = process_output(translation);
     if (merge) {
-      subtitle[i].data.text = current + "\n" + translation;
+      if (language_input === "en") { //always put the Chinese on top
+        subtitle[i].data.text = translation + "\n" + current;
+      } else {
+        subtitle[i].data.text = current + "\n" + translation;
+      }
     } else {
       subtitle[i].data.text = translation;
     }
