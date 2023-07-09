@@ -18,6 +18,7 @@ const merge = args[2] && args[2] === "merge";
 var process_input = function(subs) {
   for (let i=0;i<subs.length;i++) {
     subs[i].data.text = subs[i].data.text.replace("<u>","").replace("</u>", "");
+    subs[i].data.text = subs[i].data.text.replace("<b>","").replace("</b>", "");
     for (let key in whisperFixes[language_input]) {
       if (subs[i].data.text.indexOf(key) > -1) {
         subs[i].data.text = subs[i].data.text.replace(key, whisperFixes[language_input][key]);
@@ -58,28 +59,34 @@ let subtitles = fs.readdirSync('./src')
 let supportExtensions = ['srt', 'vtt']
 for (let subtitleFile of subtitles) {
   if (!supportExtensions.includes(subtitleFile.split('.').pop())) continue
-  let subtitle = fs.readFileSync(`./src/${subtitleFile}`, 'utf8')
-  subtitle = parseSync(subtitle)
-  subtitle = subtitle.filter(line => line.type === 'cue')
-  subtitle = process_input(subtitle);
+  let subtitleInput = fs.readFileSync(`./src/${subtitleFile}`, 'utf8');
+
+  subtitleInput = parseSync(subtitleInput)
+  subtitleInput = subtitleInput.filter(line => line.type === 'cue')
+  subtitleInput = process_input(subtitleInput);
+
+  let subtitleOutput = JSON.parse(JSON.stringify(subtitleInput));
 
   let current = "";
-  for (let i=0;i<subtitle.length;i++) {
-    current = subtitle[i].data.text;
+  for (let i=0;i<subtitleInput.length;i++) {
+    current = subtitleInput[i].data.text;
     console.log(current);
     let translation = await translate(current, {from: language_input, to: language_output});
     console.log(translation);
     translation = process_output(translation);
     if (merge) {
       if (language_input === "en") { //always put the Chinese on top
-        subtitle[i].data.text = translation + "\n" + current;
+        subtitleOutput[i].data.text = translation + "\n" + current;
       } else {
-        subtitle[i].data.text = current + "\n" + translation;
+        subtitleOutput[i].data.text = current + "\n" + translation;
       }
     } else {
-      subtitle[i].data.text = translation;
+      subtitleOutput[i].data.text = translation;
     }
   }
 
-  fs.writeFileSync(`./res/${subtitleFile}`, stringifySync(subtitle, { format: 'srt' }))
+  fs.writeFileSync(`./res/${language_output}_${subtitleFile}`, stringifySync(subtitleOutput, { format: 'srt' }));
+  if (!merge) {
+    fs.writeFileSync(`./res/${language_input}_${subtitleFile}`, stringifySync(subtitleInput, { format: 'srt' }));
+  }
 }
